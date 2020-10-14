@@ -67,6 +67,7 @@ type Range struct {
 	RangeEnd   net.IP      `json:"rangeEnd,omitempty"`   // The last ip, inclusive
 	Subnet     types.IPNet `json:"subnet"`
 	Gateway    net.IP      `json:"gateway,omitempty"`
+	RequestedOnly bool     `json:"requestedOnly,omitempty"`
 }
 
 // NewIPAMConfig creates a NetworkConfig from the given network name.

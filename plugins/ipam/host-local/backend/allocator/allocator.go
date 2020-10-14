@@ -168,21 +168,49 @@ func (a *IPAllocator) GetIter() (*RangeIter, error) {
 	if startFromLastReservedIP {
 		for i, r := range *a.rangeset {
 			if r.Contains(lastReservedIP) {
-				iter.rangeIdx = i
-				iter.startRange = i
+				// Ignore last reserved IP if range is (now) request-only
+				if ! r.RequestedOnly {
+					iter.rangeIdx = i
+					iter.startRange = i
 
-				// We advance the cursor on every Next(), so the first call
-				// to next() will return lastReservedIP + 1
-				iter.cur = lastReservedIP
+					// We advance the cursor on every Next(), so the first call
+					// to next() will return lastReservedIP + 1
+					iter.cur = lastReservedIP
+				}
 				break
 			}
 		}
-	} else {
-		iter.rangeIdx = 0
-		iter.startRange = 0
-		iter.startIP = (*a.rangeset)[0].RangeStart
+	}
+
+	if iter.cur == nil {
+		ok, i := iter.FirstAllocRange(0)
+		if !ok {
+			return nil, fmt.Errorf("All ranges are declared as requestedOnly")
+		}
+		iter.rangeIdx = i
+        iter.startRange = i
 	}
 	return &iter, nil
+}
+
+// Find first range starting from next that isn't declared requestedOnly
+// Return false if we wrap back to startRange
+func (i *RangeIter) FirstAllocRange(next int) (bool, int) {
+    next %= len(*i.rangeset)
+    r := (*i.rangeset)[next]
+
+    if r.RequestedOnly {
+        next += 1
+        next %= len(*i.rangeset)
+
+        if next == i.startRange {
+            return false, i.startRange
+        }
+
+        return i.FirstAllocRange(next)
+    }
+
+    return true, next
 }
 
 // Next returns the next IP, its mask, and its gateway. Returns nil
@@ -204,8 +232,7 @@ func (i *RangeIter) Next() (*net.IPNet, net.IP) {
 	// If we've reached the end of this range, we need to advance the range
 	// RangeEnd is inclusive as well
 	if i.cur.Equal(r.RangeEnd) {
-		i.rangeIdx += 1
-		i.rangeIdx %= len(*i.rangeset)
+		_, i.rangeIdx = i.FirstAllocRange(i.rangeIdx + 1)
 		r = (*i.rangeset)[i.rangeIdx]
 
 		i.cur = r.RangeStart
